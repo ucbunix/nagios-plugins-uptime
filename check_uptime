@@ -1,0 +1,63 @@
+#!/bin/env bash
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+function usage {
+  printf "$0 [-c days] [-w days]\n"
+  printf "\n"
+  printf "  -c NUM	Report critical if uptime exceeds NUM\n"
+  printf "              number of days.\n"
+  printf "  -w NUM      Report warning if uptime exceeds NUM\n"
+  printf "              number of days.\n"
+  printf "  -h		print this screen\n"
+  exit 1
+}
+
+CRITICAL_THRESHOLD=
+WARNING_THRESHOLD=
+while getopts :c:w:h opt; do
+  case $opt in
+    c)
+      CRITICAL_THRESHOLD=$OPTARG
+      ;;
+    w)
+      WARNING_THRESHOLD=$OPTARG
+      ;;
+    h)
+      usage
+      ;;
+  esac
+done
+
+# get uptime in days
+EXPR=$(which expr)
+CAT=$(which cat)
+CUT=$(which cut)
+AWK=$(which awk)
+
+UPTIME=$( $EXPR $( $CAT /proc/uptime | $AWK '{ print $1 }' | $CUT -d '.' -f 1 ) / \( 3600 \* 24 \) )
+
+[[ "$CRITICAL_THRESHOLD" =~ "^[0-9]+$" ]] || CRITICAL_THRESHOLD=
+[[ "$WARNING_THRESHOLD" =~ "^[0-9]+$" ]] || WARNING_THRESHOLD=
+
+# do some simple checks
+if [[ "$CRITICAL_THRESHOLD" != "" && $CRITICAL_THRESHOLD -gt 0 && $UPTIME -ge $CRITICAL_THRESHOLD ]]; then
+  RC=$STATE_CRITICAL
+  printf "CRITICAL - Uptime is $UPTIME days (> $CRITICAL_THRESHOLD days)"
+elif [[ "$WARNING_THRESHOLD" != "" && $WARNING_THRESHOLD -gt 0  &&  $UPTIME -ge WARNING_THRESHOLD ]]; then
+  RC=$STATE_WARNING
+  printf "WARNING - Uptime is $UPTIME days (> $WARNING_THRESHOLD days)"
+elif [ $UPTIME -ge 0 ]; then
+  RC=$STATE_OK
+  printf "OK - Uptime is $UPTIME days"
+else
+  RC=$STATE_UNKNOWN
+fi
+
+# return perf data
+printf "|uptime=%s;%s;%s;;\n" $UPTIME $WARNING_THRESHOLD $CRITICAL_THRESHOLD
+
+exit $RC
